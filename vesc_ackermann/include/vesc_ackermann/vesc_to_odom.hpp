@@ -47,6 +47,8 @@ namespace vesc_ackermann
 using nav_msgs::msg::Odometry;
 using std_msgs::msg::Float64;
 using vesc_msgs::msg::VescStateStamped;
+using vesc_msgs::msg::VescImuStamped;
+
 
 class VescToOdom : public rclcpp::Node
 {
@@ -68,16 +70,19 @@ private:
   // odometry state
   double x_, y_, yaw_;
   Float64::SharedPtr last_servo_cmd_;  ///< Last servo position commanded value
+  VescImuStamped::SharedPtr last_imu_;    ///< Last recevied imu message
   VescStateStamped::SharedPtr last_state_;  ///< Last received state message
 
   // ROS services
   rclcpp::Publisher<Odometry>::SharedPtr odom_pub_;
   rclcpp::Subscription<VescStateStamped>::SharedPtr vesc_state_sub_;
+  rclcpp::Subscription<VescImuStamped>::SharedPtr imu_sub_;
   rclcpp::Subscription<Float64>::SharedPtr servo_sub_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_pub_;
 
   // ROS callbacks
   void vescStateCallback(const VescStateStamped::SharedPtr state);
+  void imuCallback(const VescImuStamped::SharedPtr imu);
   void servoCmdCallback(const Float64::SharedPtr servo);
 };
 

@@ -44,12 +44,13 @@ using nav_msgs::msg::Odometry;
 using std::placeholders::_1;
 using std_msgs::msg::Float64;
 using vesc_msgs::msg::VescStateStamped;
+using vesc_msgs::msg::VescImuStamped;
 
 VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
 : Node("vesc_to_odom_node", options),
   odom_frame_("odom"),
   base_frame_("base_link"),
-  use_servo_cmd_(true),
+  use_servo_cmd_(false),
   publish_tf_(false),
   x_(0.0),
   y_(0.0),
@@ -89,12 +90,22 @@ VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
     servo_sub_ = create_subscription<Float64>(
       "sensors/servo_position_command", 10, std::bind(&VescToOdom::servoCmdCallback, this, _1));
   }
+  else{
+    // subscribe to imu data
+    imu_sub_ = create_subscription<VescImuStamped>(
+      "sensors/imu", 10, std::bind(&VescToOdom::imuCallback, this, _1));
+
+  }
 }
 
 void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
 {
   // check that we have a last servo command if we are depending on it for angular velocity
   if (use_servo_cmd_ && !last_servo_cmd_) {
+    return;
+  }
+  // alternativly check if imu data present
+  else if(!use_servo_cmd_ && !last_imu_){
     return;
   }
 
@@ -108,6 +119,9 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
     current_steering_angle =
       (last_servo_cmd_->data - steering_to_servo_offset_) / steering_to_servo_gain_;
     current_angular_velocity = current_speed * tan(current_steering_angle) / wheelbase_;
+  }
+  else{
+    current_angular_velocity = last_imu_->imu.angular_velocity.z;
   }
 
   // use current state as last state if this is our first time here
@@ -183,6 +197,11 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
 void VescToOdom::servoCmdCallback(const Float64::SharedPtr servo)
 {
   last_servo_cmd_ = servo;
+}
+
+void VescToOdom::imuCallback(const VescImuStamped::SharedPtr imu)
+{
+  last_imu_ = imu;
 }
 
 }  // namespace vesc_ackermann
