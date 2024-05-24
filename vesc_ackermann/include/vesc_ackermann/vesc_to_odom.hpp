@@ -40,6 +40,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <vesc_msgs/msg/vesc_state_stamped.hpp>
+#include <vesc_msgs/msg/vesc_imu_stamped.hpp>
+
 
 namespace vesc_ackermann
 {
