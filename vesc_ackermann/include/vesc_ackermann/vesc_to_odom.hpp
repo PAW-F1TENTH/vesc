@@ -75,17 +75,22 @@ private:
   VescImuStamped::SharedPtr last_imu_;    ///< Last recevied imu message
   VescStateStamped::SharedPtr last_state_;  ///< Last received state message
 
+
   // ROS services
   rclcpp::Publisher<Odometry>::SharedPtr odom_pub_;
   rclcpp::Subscription<VescStateStamped>::SharedPtr vesc_state_sub_;
   rclcpp::Subscription<VescImuStamped>::SharedPtr imu_sub_;
   rclcpp::Subscription<Float64>::SharedPtr servo_sub_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_pub_;
+  rclcpp::TimerBase::SharedPtr timer_;
 
   // ROS callbacks
   void vescStateCallback(const VescStateStamped::SharedPtr state);
   void imuCallback(const VescImuStamped::SharedPtr imu);
   void servoCmdCallback(const Float64::SharedPtr servo);
+  void timerCallback(); //timer for fixed interval of odometry
+
+  void calculateOdometry(const rclcpp::Time& current_time); //mega func? for odometry
 };
 
 }  // namespace vesc_ackermann
