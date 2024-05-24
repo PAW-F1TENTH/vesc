@@ -99,6 +99,10 @@ VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
   timer_ = create_wall_timer(
     std::chrono::milliseconds(20),  // 50 Hz?
     std::bind(&VescToOdom::timerCallback, this));
+
+  ang_vel_z_avg = 0;
+  current_speed_erp_avg = 0;
+  servo_avg = 0;
 }
 
 
