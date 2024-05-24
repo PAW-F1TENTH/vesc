@@ -35,7 +35,6 @@
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <vesc_msgs/msg/vesc_state_stamped.hpp>
-#include <sensor_msgs/msg/imu.hpp>
 
 namespace vesc_ackermann
 {
@@ -199,7 +198,7 @@ void VescToOdom::servoCmdCallback(const Float64::SharedPtr servo)
 {
   // filter not nessecary cause its a steering command anyway (no measured feedback)
   last_servo_cmd_ = servo;
-  servo_avg = servo;
+  servo_avg = servo->data;
 }
 
 void VescToOdom::imuCallback(const VescImuStamped::SharedPtr imu_msg)
