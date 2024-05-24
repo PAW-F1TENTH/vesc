@@ -75,6 +75,8 @@ private:
   VescImuStamped::SharedPtr last_imu_;    ///< Last recevied imu message
   VescStateStamped::SharedPtr last_state_;  ///< Last received state message
 
+  double ang_vel_z_avg, current_speed_erp_avg, servo_avg;
+
 
   // ROS services
   rclcpp::Publisher<Odometry>::SharedPtr odom_pub_;

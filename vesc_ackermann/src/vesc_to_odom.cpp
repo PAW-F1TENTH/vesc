@@ -108,33 +108,25 @@ void VescToOdom::calculateOdometry(const rclcpp::Time& current_time)
 
   // this is the old code of vesc state callback... TO BE CHANGED
 
-  // convert to engineering units
-  double current_speed = (-last_state_->state.speed - speed_to_erpm_offset_) / speed_to_erpm_gain_;
-  if (std::fabs(current_speed) < 0.05) {
-    current_speed = 0.0;
-  }
+
   
   double current_steering_angle(0.0), current_angular_velocity(0.0);
   if (use_servo_cmd_ && last_servo_cmd_) {
     current_steering_angle =
       (last_servo_cmd_->data - steering_to_servo_offset_) / steering_to_servo_gain_;
-    current_angular_velocity = current_speed * tan(current_steering_angle) / wheelbase_;
-  } else {
-    current_angular_velocity = last_imu_->angular_velocity.z;
+    current_angular_velocity = current_speed_erp_avg * tan(current_steering_angle) / wheelbase_;
   }
-  else{
-    current_angular_velocity = last_imu_->imu.angular_velocity.z;
+  else
+  {
+    current_angular_velocity = ang_vel_z_avg;
   }
-
-  double imu_acceleration_x = last_imu_->linear_acceleration.x;
-  double imu_acceleration_y = last_imu_->linear_acceleration.y;
 
   // calc elapsed time
   auto dt = current_time - rclcpp::Time(last_state_->header.stamp);
 
   // propigate odometry
-  double x_dot = imu_acceleration_x * cos(yaw_) - imu_acceleration_y * sin(yaw_);
-  double y_dot = imu_acceleration_x * sin(yaw_) + imu_acceleration_y * cos(yaw_);
+  double x_dot = current_speed_erp_avg * cos(yaw_);
+  double y_dot = current_speed_erp_avg * sin(yaw_);
   x_ += x_dot * dt.seconds();
   y_ += y_dot * dt.seconds();
   yaw_ += current_angular_velocity * dt.seconds();
@@ -159,7 +151,7 @@ void VescToOdom::calculateOdometry(const rclcpp::Time& current_time)
   odom.pose.covariance[35] = 0.4;  ///< yaw
 
   // Velocity ("in the coordinate frame given by the child_frame_id")
-  odom.twist.twist.linear.x = current_speed;
+  odom.twist.twist.linear.x = current_speed_erp_avg;
   odom.twist.twist.linear.y = 0.0;
   odom.twist.twist.angular.z = current_angular_velocity;
 
@@ -192,12 +184,22 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
 {
   // filter data here?
   last_state_ = state;
+
+  // convert to engineering units
+  double this_current_speed = (-last_state_->state.speed - speed_to_erpm_offset_) / speed_to_erpm_gain_;
+  if (std::fabs(this_current_speed) < 0.05) {
+    this_current_speed = 0.0;
+  }
+
+  current_speed_erp_avg -= current_speed_erp_avg / 3;
+  current_speed_erp_avg += this_current_speed / 3;
 }
 
 void VescToOdom::servoCmdCallback(const Float64::SharedPtr servo)
 {
   // filter not nessecary cause its a steering command anyway (no measured feedback)
   last_servo_cmd_ = servo;
+  servo_avg = servo;
 }
 
 void VescToOdom::imuCallback(const VescImuStamped::SharedPtr imu_msg)
@@ -206,8 +208,9 @@ void VescToOdom::imuCallback(const VescImuStamped::SharedPtr imu_msg)
   last_imu_ = imu_msg;
 
   // just rolling average over last odom intervall (Hz specified in odom timer)
-
-
+  double this_ang_vel_z = last_imu_->imu.angular_velocity.z / 180 * M_PI;
+  ang_vel_z_avg -= ang_vel_z_avg / 3;
+  ang_vel_z_avg += this_ang_vel_z / 3;
 }
 
 // callback for publishing odometry at a fixed intervall
