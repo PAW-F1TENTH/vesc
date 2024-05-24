@@ -40,6 +40,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <vesc_msgs/msg/vesc_state_stamped.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 
 namespace vesc_ackermann
 {
@@ -69,16 +70,23 @@ private:
   double x_, y_, yaw_;
   Float64::SharedPtr last_servo_cmd_;  ///< Last servo position commanded value
   VescStateStamped::SharedPtr last_state_;  ///< Last received state message
+  sensor_msgs::msg::Imu::SharedPtr last_imu_;  // last imu message
 
   // ROS services
   rclcpp::Publisher<Odometry>::SharedPtr odom_pub_;
   rclcpp::Subscription<VescStateStamped>::SharedPtr vesc_state_sub_;
   rclcpp::Subscription<Float64>::SharedPtr servo_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;  //imu subscriber
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_pub_;
+  rclcpp::TimerBase::SharedPtr timer_;
 
   // ROS callbacks
   void vescStateCallback(const VescStateStamped::SharedPtr state);
   void servoCmdCallback(const Float64::SharedPtr servo);
+  void imuCallback(const sensor_msgs::msg::Imu::SharedPtr imu_msg); //imu msg callback
+  void timerCallback(); //timer for fixed interval of odometry
+
+  void calculateOdometry(const rclcpp::Time& current_time); //mega func? for odometry
 };
 
 }  // namespace vesc_ackermann
