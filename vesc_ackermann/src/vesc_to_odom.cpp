@@ -103,15 +103,15 @@ VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
   ang_vel_z_avg = 0;
   current_speed_erp_avg = 0;
   servo_avg = 0;
+
+  last_time_odom = 0;
 }
 
 
-void VescToOdom::calculateOdometry(const rclcpp::Time& current_time)
+void VescToOdom::calculateOdometry(const rclcpp::Time& current_time, const rclcpp::Time& dt)
 {
 
   // this is the old code of vesc state callback... TO BE CHANGED
-
-
   
   double current_steering_angle(0.0), current_angular_velocity(0.0);
   if (use_servo_cmd_ && last_servo_cmd_) {
@@ -123,9 +123,6 @@ void VescToOdom::calculateOdometry(const rclcpp::Time& current_time)
   {
     current_angular_velocity = ang_vel_z_avg;
   }
-
-  // calc elapsed time
-  auto dt = current_time - rclcpp::Time(last_state_->header.stamp);
 
   // propigate odometry
   double x_dot = current_speed_erp_avg * cos(yaw_);
@@ -179,6 +176,8 @@ void VescToOdom::calculateOdometry(const rclcpp::Time& current_time)
   if (rclcpp::ok()) {
     odom_pub_->publish(odom);
   }
+
+  rclcpp::Time last_time_odom = current_time;
 }
 
 
@@ -219,12 +218,16 @@ void VescToOdom::imuCallback(const VescImuStamped::SharedPtr imu_msg)
 // callback for publishing odometry at a fixed intervall
 void VescToOdom::timerCallback()
 {
-  if (!last_state_ || !last_imu_) {
+  rclcpp::Time current_time = this->now();
+  // calc elapsed time
+  auto dt = current_time - last_time_odom;
+
+  if (!last_state_ || !last_imu_ || !(dt > 0)) {
     return;
   }
 
-  rclcpp::Time current_time = this->now();
-  calculateOdometry(current_time);
+  calculateOdometry(current_time, dt);
+  last_time_odom = current_time;
 }
 
 

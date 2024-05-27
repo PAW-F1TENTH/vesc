@@ -75,7 +75,9 @@ private:
   VescImuStamped::SharedPtr last_imu_;    ///< Last recevied imu message
   VescStateStamped::SharedPtr last_state_;  ///< Last received state message
 
+  //
   double ang_vel_z_avg, current_speed_erp_avg, servo_avg;
+  rclcpp::Time last_time_odom;
 
 
   // ROS services
@@ -92,7 +94,7 @@ private:
   void servoCmdCallback(const Float64::SharedPtr servo);
   void timerCallback(); //timer for fixed interval of odometry
 
-  void calculateOdometry(const rclcpp::Time& current_time); //mega func? for odometry
+  void calculateOdometry(const rclcpp::Time& current_time, const rclcpp::Time& dt); //mega func? for odometry
 };
 
 }  // namespace vesc_ackermann
