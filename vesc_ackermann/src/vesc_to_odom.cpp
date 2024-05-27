@@ -104,11 +104,11 @@ VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
   current_speed_erp_avg = 0;
   servo_avg = 0;
 
-  last_time_odom = 0;
+  last_time_odom = this->now();
 }
 
 
-void VescToOdom::calculateOdometry(const rclcpp::Time& current_time, const rclcpp::Time& dt)
+void VescToOdom::calculateOdometry(const rclcpp::Time& current_time, const double dt)
 {
 
   // this is the old code of vesc state callback... TO BE CHANGED
@@ -127,9 +127,9 @@ void VescToOdom::calculateOdometry(const rclcpp::Time& current_time, const rclcp
   // propigate odometry
   double x_dot = current_speed_erp_avg * cos(yaw_);
   double y_dot = current_speed_erp_avg * sin(yaw_);
-  x_ += x_dot * dt.seconds();
-  y_ += y_dot * dt.seconds();
-  yaw_ += current_angular_velocity * dt.seconds();
+  x_ += x_dot * dt;
+  y_ += y_dot * dt;
+  yaw_ += current_angular_velocity * dt;
 
   // publish odometry message
   Odometry odom;
@@ -220,7 +220,7 @@ void VescToOdom::timerCallback()
 {
   rclcpp::Time current_time = this->now();
   // calc elapsed time
-  auto dt = current_time - last_time_odom;
+  double dt = current_time.seconds() - last_time_odom.seconds();
 
   if (!last_state_ || !last_imu_ || !(dt > 0)) {
     return;

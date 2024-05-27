@@ -94,7 +94,7 @@ private:
   void servoCmdCallback(const Float64::SharedPtr servo);
   void timerCallback(); //timer for fixed interval of odometry
 
-  void calculateOdometry(const rclcpp::Time& current_time, const rclcpp::Time& dt); //mega func? for odometry
+  void calculateOdometry(const rclcpp::Time& current_time, const double dt); //mega func? for odometry
 };
 
 }  // namespace vesc_ackermann
