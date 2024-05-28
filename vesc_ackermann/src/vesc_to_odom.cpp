@@ -222,7 +222,7 @@ void VescToOdom::timerCallback()
   // calc elapsed time
   double dt = current_time.seconds() - last_time_odom.seconds();
 
-  if (!last_state_ || !last_imu_ || !(dt > 0)) {
+  if (!last_state_ || !last_imu_ || !last_servo_cmd_ || !(dt > 0)) {
     return;
   }
 
