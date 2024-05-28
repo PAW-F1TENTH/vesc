@@ -88,68 +88,53 @@ VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
 
   if (use_servo_cmd_) {
     servo_sub_ = create_subscription<Float64>(
-      "sensors/servo_position_command", 10, std::bind(&VescToOdom::servoCmdCallback, this, _1));
+    "sensors/servo_position_command", 10, std::bind(&VescToOdom::servoCmdCallback, this, _1));
   }
-  else{
-    // subscribe to imu data
-    imu_sub_ = create_subscription<VescImuStamped>(
-      "sensors/imu", 10, std::bind(&VescToOdom::imuCallback, this, _1));
 
-  }
+  // add imu subscriber
+  imu_sub_ = create_subscription<VescImuStamped>(
+    "sensors/imu", 10, std::bind(&VescToOdom::imuCallback, this, _1));
+
+  // add timer for fixed interval of odom calcing and publishing
+  timer_ = create_wall_timer(
+    std::chrono::milliseconds(20),  // 50 Hz?
+    std::bind(&VescToOdom::timerCallback, this));
+
+  ang_vel_z_avg = 0;
+  current_speed_erp_avg = 0;
+  servo_avg = 0;
+
+  last_time_odom = this->now();
 }
 
-void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
-{
-  // check that we have a last servo command if we are depending on it for angular velocity
-  if (use_servo_cmd_ && !last_servo_cmd_) {
-    return;
-  }
-  // alternativly check if imu data present
-  else if(!use_servo_cmd_ && !last_imu_){
-    return;
-  }
 
-  // convert to engineering units
-  double current_speed = (-state->state.speed - speed_to_erpm_offset_) / speed_to_erpm_gain_;
-  if (std::fabs(current_speed) < 0.05) {
-    current_speed = 0.0;
-  }
+void VescToOdom::calculateOdometry(const rclcpp::Time& current_time, const double dt)
+{
+
+  // this is the old code of vesc state callback... TO BE CHANGED
+  
   double current_steering_angle(0.0), current_angular_velocity(0.0);
-  if (use_servo_cmd_) {
+  if (use_servo_cmd_ && last_servo_cmd_) {
     current_steering_angle =
       (last_servo_cmd_->data - steering_to_servo_offset_) / steering_to_servo_gain_;
-    current_angular_velocity = current_speed * tan(current_steering_angle) / wheelbase_;
+    current_angular_velocity = current_speed_erp_avg * tan(current_steering_angle) / wheelbase_;
   }
-  else{
-    current_angular_velocity = last_imu_->imu.angular_velocity.z;
+  else
+  {
+    current_angular_velocity = ang_vel_z_avg;
   }
-
-  // use current state as last state if this is our first time here
-  if (!last_state_) {
-    last_state_ = state;
-  }
-
-  // calc elapsed time
-  auto dt = rclcpp::Time(state->header.stamp) - rclcpp::Time(last_state_->header.stamp);
-
-  /** @todo could probably do better propigating odometry, e.g. trapezoidal integration */
 
   // propigate odometry
-  double x_dot = current_speed * cos(yaw_);
-  double y_dot = current_speed * sin(yaw_);
-  x_ += x_dot * dt.seconds();
-  y_ += y_dot * dt.seconds();
-  if (use_servo_cmd_) {
-    yaw_ += current_angular_velocity * dt.seconds();
-  }
-
-  // save state for next time
-  last_state_ = state;
+  double x_dot = current_speed_erp_avg * cos(yaw_);
+  double y_dot = current_speed_erp_avg * sin(yaw_);
+  x_ += x_dot * dt;
+  y_ += y_dot * dt;
+  yaw_ += current_angular_velocity * dt;
 
   // publish odometry message
   Odometry odom;
   odom.header.frame_id = odom_frame_;
-  odom.header.stamp = state->header.stamp;
+  odom.header.stamp = current_time;
   odom.child_frame_id = base_frame_;
 
   // Position
@@ -161,13 +146,12 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
   odom.pose.pose.orientation.w = cos(yaw_ / 2.0);
 
   // Position uncertainty
-  /** @todo Think about position uncertainty, perhaps get from parameters? */
   odom.pose.covariance[0] = 0.2;   ///< x
   odom.pose.covariance[7] = 0.2;   ///< y
   odom.pose.covariance[35] = 0.4;  ///< yaw
 
   // Velocity ("in the coordinate frame given by the child_frame_id")
-  odom.twist.twist.linear.x = current_speed;
+  odom.twist.twist.linear.x = current_speed_erp_avg;
   odom.twist.twist.linear.y = 0.0;
   odom.twist.twist.angular.z = current_angular_velocity;
 
@@ -178,7 +162,7 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
     TransformStamped tf;
     tf.header.frame_id = odom_frame_;
     tf.child_frame_id = base_frame_;
-    tf.header.stamp = now();
+    tf.header.stamp = current_time;
     tf.transform.translation.x = x_;
     tf.transform.translation.y = y_;
     tf.transform.translation.z = 0.0;
@@ -192,17 +176,60 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
   if (rclcpp::ok()) {
     odom_pub_->publish(odom);
   }
+
+  rclcpp::Time last_time_odom = current_time;
+}
+
+
+// callback for recoieving sensor data
+void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
+{
+  // filter data here?
+  last_state_ = state;
+
+  // convert to engineering units
+  double this_current_speed = (-last_state_->state.speed - speed_to_erpm_offset_) / speed_to_erpm_gain_;
+  if (std::fabs(this_current_speed) < 0.05) {
+    this_current_speed = 0.0;
+  }
+
+  current_speed_erp_avg -= current_speed_erp_avg / 3;
+  current_speed_erp_avg += this_current_speed / 3;
 }
 
 void VescToOdom::servoCmdCallback(const Float64::SharedPtr servo)
 {
+  // filter not nessecary cause its a steering command anyway (no measured feedback)
   last_servo_cmd_ = servo;
+  servo_avg = servo->data;
 }
 
-void VescToOdom::imuCallback(const VescImuStamped::SharedPtr imu)
+void VescToOdom::imuCallback(const VescImuStamped::SharedPtr imu_msg)
 {
-  last_imu_ = imu;
+  // filter data here?
+  last_imu_ = imu_msg;
+
+  // just rolling average over last odom intervall (Hz specified in odom timer)
+  double this_ang_vel_z = last_imu_->imu.angular_velocity.z / 180 * M_PI;
+  ang_vel_z_avg -= ang_vel_z_avg / 3;
+  ang_vel_z_avg += this_ang_vel_z / 3;
 }
+
+// callback for publishing odometry at a fixed intervall
+void VescToOdom::timerCallback()
+{
+  rclcpp::Time current_time = this->now();
+  // calc elapsed time
+  double dt = current_time.seconds() - last_time_odom.seconds();
+
+  if (!last_state_ || !last_imu_ || !(dt > 0)) {
+    return;
+  }
+
+  calculateOdometry(current_time, dt);
+  last_time_odom = current_time;
+}
+
 
 }  // namespace vesc_ackermann
 
